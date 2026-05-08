@@ -1,129 +1,95 @@
-import logging
 import os
 import json
 import urllib.request
-import urllib.parse
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters,
-)
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+import logging
 
-logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TELEGRAM_TOKEN = "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY"
-ANTHROPIC_API_KEY = "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"
+TOKEN = os.environ.get("TELEGRAM_TOKEN", "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY")
+API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 user_mode = {}
 
-SYSTEM_PROMPTS = {
-    "slayd": "Siz talabalar uchun professional prezentatsiya yaratib beradigan yordamchisiz. Har bir slayd uchun sarlavha va 4-5 ta asosiy nuqta bilan batafsil prezentatsiya tarkibini o'zbek tilida tayyorlaysiz.",
-    "kurs_ishi": "Siz talabalar uchun kurs ishi yozib beradigan akademik yordamchisiz. Kirish, nazariy asoslar, tahlil, xulosa va adabiyotlar ro'yxati bilan to'liq kurs ishi yozasiz. O'zbek tilida.",
-    "maqola": "Siz ilmiy maqolalar yozib beradigan yordamchisiz. Annotatsiya, kalit so'zlar, kirish, asosiy qism, xulosa va adabiyotlar bilan to'liq maqola yozasiz. O'zbek tilida.",
-    "referat": "Siz talabalar uchun referat tayyorlab beradigan yordamchisiz. Kirish, asosiy qism, xulosa va adabiyotlar bilan to'liq referat yozasiz. O'zbek tilida.",
-    "esse": "Siz esse yozib beradigan yordamchisiz. 500-800 so'z. O'zbek tilida.",
-    "test": "Siz test savollari tuzib beradigan yordamchisiz. A,B,C,D variantli testlar tuzasiz, to'g'ri javobni oxirida ko'rsatasiz.",
-    "tarjima": "Siz professional tarjimon yordamchisiz. Berilgan matnni so'ralgan tilga aniq tarjima qilasiz.",
-    "umumiy": "Siz o'zbek tilida gaplashadigan talabalarga yordam beradigan AI yordamchisiz.",
+PROMPTS = {
+    "slayd": "Siz professional prezentatsiya yaratib beradigan yordamchisiz. O'zbek tilida, har bir slayd uchun sarlavha va 4-5 nuqta bilan tayyorlang.",
+    "kurs": "Siz kurs ishi yozib beradigan yordamchisiz. Kirish, asosiy qism, xulosa, adabiyotlar bilan O'zbek tilida yozing.",
+    "maqola": "Siz ilmiy maqola yozib beradigan yordamchisiz. Annotatsiya, kirish, asosiy qism, xulosa bilan O'zbek tilida yozing.",
+    "referat": "Siz referat tayyorlab beradigan yordamchisiz. To'liq tuzilma bilan O'zbek tilida yozing.",
+    "esse": "Siz esse yozib beradigan yordamchisiz. 500-800 so'z, O'zbek tilida.",
+    "test": "Siz A,B,C,D variantli test tuzib beradigan yordamchisiz. To'g'ri javobni oxirida ko'rsating.",
+    "tarjima": "Siz professional tarjimon yordamchisiz. So'ralgan tilga aniq tarjima qiling.",
+    "umumiy": "Siz O'zbek tilida gaplashadigan talabalar uchun AI yordamchisiz.",
 }
 
-VAZIFA_NOMI = {
-    "slayd": "📊 Slayd", "kurs_ishi": "📝 Kurs ishi",
+NAMES = {
+    "slayd": "📊 Slayd", "kurs": "📝 Kurs ishi",
     "maqola": "📄 Maqola", "referat": "📚 Referat",
     "esse": "✍️ Esse", "test": "🧪 Test",
     "tarjima": "🌐 Tarjima", "umumiy": "💬 Suhbat",
 }
 
-VAZIFA_SAVOL = {
-    "slayd": "📊 Qaysi mavzu bo'yicha prezentatsiya tayyorlay?",
-    "kurs_ishi": "📝 Qaysi mavzu bo'yicha kurs ishi yozay?",
-    "maqola": "📄 Qaysi mavzu bo'yicha maqola yozay?",
-    "referat": "📚 Qaysi mavzu bo'yicha referat tayyorlay?",
-    "esse": "✍️ Qaysi mavzu bo'yicha esse yozay?",
-    "test": "🧪 Mavzu va nechta test kerakligini yozing.",
-    "tarjima": "🌐 Matn va qaysi tilga tarjima kerakligini yozing.",
-    "umumiy": "💬 Savolingizni yozing!",
-}
+def menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 Slayd", callback_data="slayd"), InlineKeyboardButton("📝 Kurs ishi", callback_data="kurs")],
+        [InlineKeyboardButton("📄 Maqola", callback_data="maqola"), InlineKeyboardButton("📚 Referat", callback_data="referat")],
+        [InlineKeyboardButton("✍️ Esse", callback_data="esse"), InlineKeyboardButton("🧪 Test", callback_data="test")],
+        [InlineKeyboardButton("🌐 Tarjima", callback_data="tarjima"), InlineKeyboardButton("💬 Suhbat", callback_data="umumiy")],
+    ])
 
-def ask_claude(system, user_text):
+def ask(system, text):
     data = json.dumps({
         "model": "claude-opus-4-5",
         "max_tokens": 4000,
         "system": system,
-        "messages": [{"role": "user", "content": user_text}]
-    }).encode("utf-8")
+        "messages": [{"role": "user", "content": text}]
+    }).encode()
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
         data=data,
-        headers={
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-        method="POST"
+        headers={"x-api-key": API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
     )
-    with urllib.request.urlopen(req) as resp:
-        result = json.loads(resp.read().decode("utf-8"))
-        return result["content"][0]["text"]
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())["content"][0]["text"]
 
-def main_menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Slayd", callback_data="slayd"), InlineKeyboardButton("📝 Kurs ishi", callback_data="kurs_ishi")],
-        [InlineKeyboardButton("📄 Maqola", callback_data="maqola"), InlineKeyboardButton("📚 Referat", callback_data="referat")],
-        [InlineKeyboardButton("✍️ Esse", callback_data="esse"), InlineKeyboardButton("🧪 Test", callback_data="test")],
-        [InlineKeyboardButton("🌐 Tarjima", callback_data="tarjima"), InlineKeyboardButton("💬 Erkin suhbat", callback_data="umumiy")],
-    ])
+async def start(u: Update, c: ContextTypes.DEFAULT_TYPE):
+    await u.message.reply_text(f"👋 Salom *{u.effective_user.first_name}*!\n\n🎓 *Akadem Yordamchi* — talabalar uchun AI!\n\nVazifa tanlang 👇", parse_mode="Markdown", reply_markup=menu())
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"👋 Salom *{update.effective_user.first_name}*!\n\n🎓 Men *Akadem Yordamchi*!\n\nVazifani tanlang 👇",
-        parse_mode="Markdown", reply_markup=main_menu()
-    )
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "menu":
-        user_mode.pop(query.from_user.id, None)
-        await query.edit_message_text("🏠 Asosiy menyu 👇", reply_markup=main_menu())
+async def btn(u: Update, c: ContextTypes.DEFAULT_TYPE):
+    q = u.callback_query
+    await q.answer()
+    if q.data == "menu":
+        user_mode.pop(q.from_user.id, None)
+        await q.edit_message_text("🏠 Menyu 👇", reply_markup=menu())
         return
-    user_mode[query.from_user.id] = query.data
-    await query.edit_message_text(
-        VAZIFA_SAVOL.get(query.data, "Mavzuni yozing:"),
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Menyu", callback_data="menu")]])
-    )
+    user_mode[q.from_user.id] = q.data
+    await q.edit_message_text(f"*{NAMES[q.data]}* rejimi!\n\nMavzuni yozing:", parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Menyu", callback_data="menu")]]))
 
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    mode = user_mode.get(user_id, "umumiy")
-    thinking = await update.message.reply_text(f"⏳ {VAZIFA_NOMI.get(mode)} bajarilmoqda...")
+async def msg(u: Update, c: ContextTypes.DEFAULT_TYPE):
+    uid = u.effective_user.id
+    mode = user_mode.get(uid, "umumiy")
+    t = await u.message.reply_text(f"⏳ {NAMES[mode]} bajarilmoqda...")
     try:
-        text = ask_claude(SYSTEM_PROMPTS.get(mode), update.message.text)
-        await thinking.delete()
+        res = ask(PROMPTS[mode], u.message.text)
+        await t.delete()
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Yana", callback_data=mode), InlineKeyboardButton("🏠 Menyu", callback_data="menu")]])
-        for i in range(0, len(text), 4000):
-            chunk = text[i:i+4000]
-            if i + 4000 >= len(text):
-                await update.message.reply_text(chunk, reply_markup=kb)
-            else:
-                await update.message.reply_text(chunk)
+        for i in range(0, len(res), 4000):
+            chunk = res[i:i+4000]
+            await u.message.reply_text(chunk, reply_markup=kb if i+4000 >= len(res) else None)
     except Exception as e:
         logger.error(e)
-        await thinking.edit_text("❌ Xatolik! /start bosing.")
+        await t.edit_text("❌ Xatolik! /start bosing.")
 
-async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_mode.pop(update.effective_user.id, None)
-    await update.message.reply_text("🏠 Asosiy menyu 👇", reply_markup=main_menu())
+async def menu_cmd(u: Update, c: ContextTypes.DEFAULT_TYPE):
+    user_mode.pop(u.effective_user.id, None)
+    await u.message.reply_text("🏠 Menyu 👇", reply_markup=menu())
 
-def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", menu_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-    logger.info("Bot ishga tushdi!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+app = Application.builder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("menu", menu_cmd))
+app.add_handler(CallbackQueryHandler(btn))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
+app.run_polling()
