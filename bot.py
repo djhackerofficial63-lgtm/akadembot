@@ -2,7 +2,6 @@ import os
 import json
 import urllib.request
 import logging
-import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
@@ -11,7 +10,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY"
-API_KEY = "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"
+API_KEY = "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"
+WEBHOOK_URL = "https://akadembot.onrender.com"
 PORT = int(os.environ.get("PORT", 8080))
 
 user_mode = {}
@@ -33,18 +33,6 @@ NAMES = {
     "esse": "✍️ Esse", "test": "🧪 Test",
     "tarjima": "🌐 Tarjima", "umumiy": "💬 Suhbat",
 }
-
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running!")
-    def log_message(self, format, *args):
-        pass
-
-def run_web():
-    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
-    server.serve_forever()
 
 def menu():
     return InlineKeyboardMarkup([
@@ -115,17 +103,20 @@ async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_mode.pop(update.effective_user.id, None)
     await update.message.reply_text("🏠 Menyu 👇", reply_markup=menu())
 
-if __name__ == "__main__":
-    t = threading.Thread(target=run_web, daemon=True)
-    t.start()
-    logger.info(f"Web server {PORT} portda ishga tushdi!")
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("menu", menu_cmd))
-    application.add_handler(CallbackQueryHandler(btn))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
-    logger.info("Bot ishga tushdi!")
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True
+def main():
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", menu_cmd))
+    app.add_handler(CallbackQueryHandler(btn))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
+        url_path=TOKEN,
+        drop_pending_updates=True,
     )
+
+if __name__ == "__main__":
+    main()
