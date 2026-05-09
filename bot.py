@@ -2,6 +2,8 @@ import os
 import json
 import urllib.request
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
@@ -10,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN", "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY")
 API_KEY = os.environ.get("ANTHROPIC_API_KEY", "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")
+PORT = int(os.environ.get("PORT", 8080))
 
 user_mode = {}
 
@@ -31,6 +34,18 @@ NAMES = {
     "tarjima": "🌐 Tarjima", "umumiy": "💬 Suhbat",
 }
 
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+    def log_message(self, format, *args):
+        pass
+
+def run_web():
+    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
+    server.serve_forever()
+
 def menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 Slayd", callback_data="slayd"), InlineKeyboardButton("📝 Kurs ishi", callback_data="kurs")],
@@ -49,11 +64,7 @@ def ask(system, text):
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
         data=data,
-        headers={
-            "x-api-key": API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        },
+        headers={"x-api-key": API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
     )
     with urllib.request.urlopen(req) as r:
         return json.loads(r.read())["content"][0]["text"]
@@ -91,10 +102,7 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]])
         for i in range(0, len(res), 4000):
             chunk = res[i:i+4000]
-            await update.message.reply_text(
-                chunk,
-                reply_markup=kb if i + 4000 >= len(res) else None
-            )
+            await update.message.reply_text(chunk, reply_markup=kb if i+4000 >= len(res) else None)
     except Exception as e:
         logger.error(e)
         await t.edit_text("❌ Xatolik! /start bosing.")
@@ -104,6 +112,9 @@ async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🏠 Menyu 👇", reply_markup=menu())
 
 if __name__ == "__main__":
+    t = threading.Thread(target=run_web, daemon=True)
+    t.start()
+    logger.info(f"Web server {PORT} portda ishga tushdi!")
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("menu", menu_cmd))
