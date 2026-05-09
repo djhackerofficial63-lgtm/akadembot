@@ -10,8 +10,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = os.environ.get("TELEGRAM_TOKEN", "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY")
-API_KEY = os.environ.get("ANTHROPIC_API_KEY", "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")
+TOKEN = "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY"
+API_KEY = "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"
 PORT = int(os.environ.get("PORT", 8080))
 
 user_mode = {}
@@ -64,7 +64,11 @@ def ask(system, text):
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
         data=data,
-        headers={"x-api-key": API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+        headers={
+            "x-api-key": API_KEY,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        },
     )
     with urllib.request.urlopen(req) as r:
         return json.loads(r.read())["content"][0]["text"]
@@ -121,4 +125,7 @@ if __name__ == "__main__":
     application.add_handler(CallbackQueryHandler(btn))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
     logger.info("Bot ishga tushdi!")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True
+    )
