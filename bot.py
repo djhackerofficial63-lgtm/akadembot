@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY"
+TOKEN = ""8625557628:AAEYrtw6GsdS5kDzS1fBWIu3rtKQQWv8hfE
 API_KEY = "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"
 WEBHOOK_URL = "https://akadembot.onrender.com"
 PORT = int(os.environ.get("PORT", 8080))
@@ -45,7 +45,7 @@ def menu():
 def ask(system, text):
     data = json.dumps({
         "model": "claude-opus-4-5",
-        "max_tokens": 4000,
+        "max_tokens": 8000,
         "system": system,
         "messages": [{"role": "user", "content": text}]
     }).encode()
