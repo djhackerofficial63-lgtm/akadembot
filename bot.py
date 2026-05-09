@@ -5,6 +5,7 @@ import logging
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from aiohttp import web
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
 GROQ_API_KEY = "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"
 PORT = int(os.environ.get("PORT", 8080))
+WEBHOOK_URL = "https://akadembot.onrender.com"
 
 user_mode = {}
 
@@ -96,8 +98,8 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chunk = res[i:i+4000]
             await update.message.reply_text(chunk, reply_markup=kb if i+4000 >= len(res) else None)
     except Exception as e:
-        logger.error(e)
-        await t.edit_text("❌ Xatolik! /start bosing.")
+        logger.error(f"XATO: {type(e).__name__}: {e}")
+        await t.edit_text(f"❌ Xatolik: {type(e).__name__}: {str(e)[:200]}")
 
 async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_mode.pop(update.effective_user.id, None)
@@ -109,26 +111,34 @@ async def main():
     app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CallbackQueryHandler(btn))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
+
     await app.bot.set_webhook(
-        url=f"https://akadembot.onrender.com/{TOKEN}",
+        url=f"{WEBHOOK_URL}/{TOKEN}",
         drop_pending_updates=True
     )
     await app.initialize()
     await app.start()
-    from aiohttp import web
+
     async def handle(request):
         data = await request.json()
         update = Update.de_json(data, app.bot)
         await app.process_update(update)
         return web.Response(text="OK")
+
+    async def health(request):
+        return web.Response(text="Bot is running!")
+
     server = web.Application()
     server.router.add_post(f"/{TOKEN}", handle)
+    server.router.add_get("/", health)
+
     runner = web.AppRunner(server)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", PORT)
     await site.start()
+
     logger.info("Bot ishga tushdi!")
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())      
