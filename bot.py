@@ -2,6 +2,7 @@ import os
 import json
 import urllib.request
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
@@ -102,19 +103,32 @@ async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_mode.pop(update.effective_user.id, None)
     await update.message.reply_text("🏠 Menyu 👇", reply_markup=menu())
 
-def main():
+async def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CallbackQueryHandler(btn))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        webhook_url=f"https://akadembot.onrender.com/{TOKEN}",
-        url_path=TOKEN,
-        drop_pending_updates=True,
+    await app.bot.set_webhook(
+        url=f"https://akadembot.onrender.com/{TOKEN}",
+        drop_pending_updates=True
     )
+    await app.initialize()
+    await app.start()
+    from aiohttp import web
+    async def handle(request):
+        data = await request.json()
+        update = Update.de_json(data, app.bot)
+        await app.process_update(update)
+        return web.Response(text="OK")
+    server = web.Application()
+    server.router.add_post(f"/{TOKEN}", handle)
+    runner = web.AppRunner(server)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+    await site.start()
+    logger.info("Bot ishga tushdi!")
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
