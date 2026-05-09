@@ -1,22 +1,21 @@
 import os
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 from groq import Groq
 
-# Loglarni yoqish (xatoni ko'rishimiz uchun)
+# Loglar
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- DIQQAT: SHU YERNI O'ZGARTIRING ---
+# API Kalitlar
 GROQ_API_KEY = "Gsk_LGzLksX775XtwDqDaP5mWGdyb3FYLoIwT5castH0kxmBatTQTy6x"
-# Yangi olgan tokeningizni pastdagi qo'shtirnoq ichiga qo'ying
-TELEGRAM_TOKEN = "BU_YERGA_YANGI_TOKENNI_QO'YING" 
-# --------------------------------------
+TELEGRAM_TOKEN = "SIZNING_YANGI_TOKENINGIZ" # BotFather bergan yangisini qo'ying
 
 client = Groq(api_key=GROQ_API_KEY)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Salom! Groq AI botingiz tayyor. Savol bering!")
+    await update.message.reply_text("Salom! Bot muvaffaqiyatli yangilandi. Savol bering!")
 
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -28,9 +27,26 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.error(f"Xato: {e}")
 
-if __name__ == '__main__':
-    # Polling rejimi Render'da barqaror ishlaydi
+async def main():
+    # Application yaratish
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # Handlerlarni qo'shish
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), chat))
-    app.run_polling()
+    
+    # Python 3.14+ uchun to'g'ri ishga tushirish
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
+        logging.info("Bot ishga tushdi...")
+        # Bot to'xtab qolmasligi uchun cheksiz kutish
+        while True:
+            await asyncio.sleep(1)
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        pass
