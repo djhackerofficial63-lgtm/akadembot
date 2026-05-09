@@ -2,16 +2,14 @@ import os
 import json
 import urllib.request
 import logging
-from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-TOKEN = ""8625557628:AAEYrtw6GsdS5kDzS1fBWIu3rtKQQWv8hfE
-API_KEY = "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"
-WEBHOOK_URL = "https://akadembot.onrender.com"
+TOKEN = "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY"
+GROQ_API_KEY = "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"
 PORT = int(os.environ.get("PORT", 8080))
 
 user_mode = {}
@@ -44,22 +42,23 @@ def menu():
 
 def ask(system, text):
     data = json.dumps({
-        "model": "claude-opus-4-5",
-        "max_tokens": 8000,
-        "system": system,
-        "messages": [{"role": "user", "content": text}]
+        "model": "llama-3.3-70b-versatile",
+        "max_tokens": 4000,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": text}
+        ]
     }).encode()
     req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
+        "https://api.groq.com/openai/v1/chat/completions",
         data=data,
         headers={
-            "x-api-key": API_KEY,
-            "anthropic-version": "2023-06-01",
+            "Authorization": f"Bearer {GROQ_API_KEY}",
             "content-type": "application/json"
         },
     )
     with urllib.request.urlopen(req) as r:
-        return json.loads(r.read())["content"][0]["text"]
+        return json.loads(r.read())["choices"][0]["message"]["content"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -109,11 +108,10 @@ def main():
     app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CallbackQueryHandler(btn))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
-
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
-        webhook_url=f"{WEBHOOK_URL}/{TOKEN}",
+        webhook_url=f"https://akadembot.onrender.com/{TOKEN}",
         url_path=TOKEN,
         drop_pending_updates=True,
     )
