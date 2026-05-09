@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
-GROQ_API_KEY = "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"
+GEMINI_API_KEY = "AIzaSyDwtn9vdCemxS12ZjZMnebLjNv3S-yOlWE"
 PORT = int(os.environ.get("PORT", 8080))
 WEBHOOK_URL = "https://akadembot.onrender.com"
 
@@ -44,24 +44,19 @@ def menu():
     ])
 
 def ask(system, text):
+    prompt = f"{system}\n\nFoydalanuvchi: {text}"
     data = json.dumps({
-        "model": "llama-3.3-70b-versatile",
-        "max_tokens": 4000,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": text}
-        ]
+        "contents": [{"parts": [{"text": prompt}]}]
     }).encode()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     req = urllib.request.Request(
-        "https://api.groq.com/openai/v1/chat/completions",
+        url,
         data=data,
-        headers={
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "content-type": "application/json"
-        },
+        headers={"content-type": "application/json"},
     )
     with urllib.request.urlopen(req) as r:
-        return json.loads(r.read())["choices"][0]["message"]["content"]
+        result = json.loads(r.read())
+        return result["candidates"][0]["content"]["parts"][0]["text"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -141,4 +136,4 @@ async def main():
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    asyncio.run(main())     
+    asyncio.run(main())
