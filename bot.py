@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
-GEMINI_API_KEY = "AIzaSyDwtn9vdCemxS12ZjZMnebLjNv3S-yOlWE"
+GEMINI_API_KEY = "AIzaSyDOX32FfdGFnbqGrE2IxFiim3cBni1VFCU"
 PORT = int(os.environ.get("PORT", 8080))
 WEBHOOK_URL = "https://akadembot.onrender.com"
 
