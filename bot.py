@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
-GEMINI_API_KEY = "AIzaSyDOX32FfdGFnbqGrE2IxFiim3cBni1VFCU"
+TOGETHER_API_KEY = "tgp_v1_8QBA51Bhw5VIR2X8FrREJpReZCd6elFLmXs9whDnI68"
 PORT = int(os.environ.get("PORT", 8080))
 WEBHOOK_URL = "https://akadembot.onrender.com"
 
@@ -44,19 +44,24 @@ def menu():
     ])
 
 def ask(system, text):
-    prompt = f"{system}\n\nFoydalanuvchi: {text}"
     data = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}]
+        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        "max_tokens": 4000,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": text}
+        ]
     }).encode()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
     req = urllib.request.Request(
-        url,
+        "https://api.together.xyz/v1/chat/completions",
         data=data,
-        headers={"content-type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {TOGETHER_API_KEY}",
+            "content-type": "application/json"
+        },
     )
     with urllib.request.urlopen(req) as r:
-        result = json.loads(r.read())
-        return result["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(r.read())["choices"][0]["message"]["content"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
