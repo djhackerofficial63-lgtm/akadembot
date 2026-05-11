@@ -4,12 +4,13 @@ import json
 import time
 import logging
 import ssl
+import traceback
 
 # =========================
-# CONFIG
+# CONFIG (SHUNI TO‘LDIRASAN)
 # =========================
 
-TOKEN = "8625557628:AAHkSiT2Acit6zQ42tgzKEBkBOZ5xGI7h6k"
+TOKEN = "AAGrTicV7UkzXf-a8_mtMX5fv_JvVXXhpQE"
 OPENROUTER_API_KEY = "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"
 
 MODEL = "openai/gpt-4o-mini"
@@ -17,91 +18,69 @@ MODEL = "openai/gpt-4o-mini"
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}/"
 
 # =========================
-# LOGGING
+# LOG SYSTEM (DEBUG POWER)
 # =========================
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger("BOT")
 
-# =========================
-# SSL FIX
-# =========================
-
+# SSL FIX (Termux uchun)
 ssl._create_default_https_context = ssl._create_unverified_context
 
+
 # =========================
-# TELEGRAM FUNCTIONS
+# TELEGRAM CORE
 # =========================
 
-def delete_webhook():
+def tg(method, data=None):
+    url = BASE_URL + method
+
+    if data:
+        data = urllib.parse.urlencode(data).encode()
+
+    req = urllib.request.Request(url, data=data)
+
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read())
+
+
+def send(chat_id, text):
     try:
-        url = BASE_URL + "deleteWebhook"
-
-        with urllib.request.urlopen(url) as response:
-            result = json.loads(response.read())
-
-        logger.info(f"Webhook deleted: {result}")
-
-    except Exception as e:
-        logger.error(f"Webhook delete error: {e}")
-
-
-def get_updates(offset):
-    url = BASE_URL + f"getUpdates?timeout=30&offset={offset}"
-
-    with urllib.request.urlopen(url, timeout=35) as response:
-        data = response.read()
-
-    return json.loads(data)
-
-
-def send_message(chat_id, text):
-    try:
-        message = str(text)[:4000]
-
-        data = urllib.parse.urlencode({
+        tg("sendMessage", {
             "chat_id": chat_id,
-            "text": message
-        }).encode()
-
-        req = urllib.request.Request(
-            BASE_URL + "sendMessage",
-            data=data
-        )
-
-        with urllib.request.urlopen(req, timeout=30) as response:
-            return response.read()
-
+            "text": str(text)[:4096]
+        })
     except Exception as e:
-        logger.error(f"Send message error: {e}")
+        log.error(f"SEND ERROR: {e}")
 
 
-def send_typing(chat_id):
+def typing(chat_id):
     try:
-        data = urllib.parse.urlencode({
+        tg("sendChatAction", {
             "chat_id": chat_id,
             "action": "typing"
-        }).encode()
-
-        req = urllib.request.Request(
-            BASE_URL + "sendChatAction",
-            data=data
-        )
-
-        urllib.request.urlopen(req, timeout=10)
-
+        })
     except:
         pass
 
+
+def delete_webhook():
+    try:
+        res = tg("deleteWebhook", {"drop_pending_updates": True})
+        log.info(f"Webhook cleared: {res}")
+    except Exception as e:
+        log.error(f"Webhook error: {e}")
+
+
 # =========================
-# OPENROUTER AI
+# AI FUNCTION (OPENROUTER)
 # =========================
 
-def ask_ai(prompt):
+def ai(prompt):
     try:
         url = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -109,7 +88,7 @@ def ask_ai(prompt):
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://openrouter.ai",
-            "X-Title": "Akadem Bot"
+            "X-Title": "Professional Bot"
         }
 
         payload = {
@@ -117,10 +96,7 @@ def ask_ai(prompt):
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "You are a helpful Uzbek AI assistant for students. "
-                        "Answer clearly and shortly."
-                    )
+                    "content": "Sen o'zbek tilida aniq va foydali javob beradigan AI assistentsan."
                 },
                 {
                     "role": "user",
@@ -129,73 +105,60 @@ def ask_ai(prompt):
             ]
         }
 
-        data = json.dumps(payload).encode("utf-8")
+        data = json.dumps(payload).encode()
 
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers=headers,
-            method="POST"
-        )
+        req = urllib.request.Request(url, data=data, headers=headers)
 
-        with urllib.request.urlopen(req, timeout=60) as response:
-            result = json.loads(response.read())
+        with urllib.request.urlopen(req, timeout=90) as r:
+            res = json.loads(r.read())
 
-        return result["choices"][0]["message"]["content"]
+        return res["choices"][0]["message"]["content"]
 
     except Exception as e:
-        logger.error(f"AI error: {e}")
-        return "AI bilan bog‘lanishda xatolik bo‘ldi."
+        log.error(f"AI ERROR: {e}")
+        return "AI ishlamayapti. Key/API tekshiring."
+
 
 # =========================
 # MESSAGE HANDLER
 # =========================
 
-def handle_message(message):
+def handle(msg):
     try:
-        chat_id = message["chat"]["id"]
+        chat_id = msg["chat"]["id"]
+        text = msg.get("text", "")
 
-        text = message.get("text", "")
+        log.info(f"MSG: {text}")
 
-        logger.info(f"Message: {text}")
-
-        # START COMMAND
         if text == "/start":
-            send_message(
-                chat_id,
-                "Salom! Men Akadem AI botman.\n\nSavolingizni yuboring."
-            )
+            send(chat_id, "Salom! Men AI botman 🤖")
             return
 
-        # HELP COMMAND
         if text == "/help":
-            send_message(
-                chat_id,
-                "Menga istalgan savol yuboring.\n"
-                "Men AI yordamida javob beraman."
-            )
+            send(chat_id, "Savol yubor — men javob beraman.")
             return
 
-        # EMPTY MESSAGE
         if not text:
-            send_message(chat_id, "Faqat text yuboring.")
+            send(chat_id, "Faqat matn yuboring.")
             return
 
-        send_typing(chat_id)
+        typing(chat_id)
 
-        answer = ask_ai(text)
+        answer = ai(text)
 
-        send_message(chat_id, answer)
+        send(chat_id, answer)
 
     except Exception as e:
-        logger.error(f"Handle message error: {e}")
+        log.error(f"HANDLER ERROR: {e}")
+        traceback.print_exc()
+
 
 # =========================
-# MAIN LOOP
+# MAIN LOOP (STABLE + AUTO RECOVER)
 # =========================
 
 def main():
-    logger.info("Bot starting...")
+    log.info("BOT STARTING...")
 
     delete_webhook()
 
@@ -203,29 +166,29 @@ def main():
 
     while True:
         try:
-            updates = get_updates(offset)
+            updates = tg("getUpdates", {"timeout": 30, "offset": offset})
 
             if updates.get("ok"):
 
-                for update in updates["result"]:
+                for u in updates["result"]:
+                    offset = u["update_id"] + 1
 
-                    offset = update["update_id"] + 1
-
-                    if "message" in update:
-                        handle_message(update["message"])
+                    if "message" in u:
+                        handle(u["message"])
 
             time.sleep(1)
 
         except KeyboardInterrupt:
-            logger.info("Bot stopped")
+            log.info("STOPPED BY USER")
             break
 
         except Exception as e:
-            logger.error(f"Main loop error: {e}")
-            time.sleep(5)
+            log.error(f"LOOP ERROR: {e}")
+            time.sleep(3)
+
 
 # =========================
-# START
+# RUN
 # =========================
 
 if __name__ == "__main__":
