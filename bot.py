@@ -10,7 +10,7 @@ import ssl
 # =========================
 
 TOKEN = "8625557628:AAHkSiT2Acit6zQ42tgzKEBkBOZ5xGI7h6k"
-OPENROUTER_API_KEY = "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"
+OPENROUTER_API_KEY = "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"
 
 MODEL = "openai/gpt-4o-mini"
 
