@@ -1,16 +1,15 @@
-import os
 import json
 import urllib.request
+import urllib.parse
+import time
 import logging
-import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
 OPENROUTER_API_KEY = "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"
+API_URL = f"https://api.telegram.org/bot{TOKEN}"
 
 user_mode = {}
 
@@ -32,13 +31,15 @@ NAMES = {
     "tarjima": "🌐 Tarjima", "umumiy": "💬 Suhbat",
 }
 
-def menu():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📊 Slayd", callback_data="slayd"), InlineKeyboardButton("📝 Kurs ishi", callback_data="kurs")],
-        [InlineKeyboardButton("📄 Maqola", callback_data="maqola"), InlineKeyboardButton("📚 Referat", callback_data="referat")],
-        [InlineKeyboardButton("✍️ Esse", callback_data="esse"), InlineKeyboardButton("🧪 Test", callback_data="test")],
-        [InlineKeyboardButton("🌐 Tarjima", callback_data="tarjima"), InlineKeyboardButton("💬 Suhbat", callback_data="umumiy")],
-    ])
+def tg(method, **params):
+    data = json.dumps(params).encode()
+    req = urllib.request.Request(
+        f"{API_URL}/{method}",
+        data=data,
+        headers={"content-type": "application/json"}
+    )
+    with urllib.request.urlopen(req) as r:
+        return json.loads(r.read())
 
 def ask(system, text):
     data = json.dumps({
@@ -62,58 +63,102 @@ def ask(system, text):
     with urllib.request.urlopen(req) as r:
         return json.loads(r.read())["choices"][0]["message"]["content"]
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"👋 Salom *{update.effective_user.first_name}*!\n\n🎓 *Akadem Yordamchi* — talabalar uchun AI!\n\nVazifa tanlang 👇",
-        parse_mode="Markdown", reply_markup=menu()
-    )
-
-async def btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == "menu":
-        user_mode.pop(query.from_user.id, None)
-        await query.edit_message_text("🏠 Menyu 👇", reply_markup=menu())
-        return
-    user_mode[query.from_user.id] = query.data
-    await query.edit_message_text(
-        f"*{NAMES[query.data]}* rejimi!\n\nMavzuni yozing:",
+def send_menu(chat_id, text):
+    tg("sendMessage",
+        chat_id=chat_id,
+        text=text,
         parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Menyu", callback_data="menu")]])
+        reply_markup={
+            "inline_keyboard": [
+                [{"text": "📊 Slayd", "callback_data": "slayd"}, {"text": "📝 Kurs ishi", "callback_data": "kurs"}],
+                [{"text": "📄 Maqola", "callback_data": "maqola"}, {"text": "📚 Referat", "callback_data": "referat"}],
+                [{"text": "✍️ Esse", "callback_data": "esse"}, {"text": "🧪 Test", "callback_data": "test"}],
+                [{"text": "🌐 Tarjima", "callback_data": "tarjima"}, {"text": "💬 Suhbat", "callback_data": "umumiy"}],
+            ]
+        }
     )
 
-async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    mode = user_mode.get(uid, "umumiy")
-    t = await update.message.reply_text(f"⏳ {NAMES[mode]} bajarilmoqda...")
-    try:
-        res = ask(PROMPTS[mode], update.message.text)
-        await t.delete()
-        kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔄 Yana", callback_data=mode),
-            InlineKeyboardButton("🏠 Menyu", callback_data="menu")
-        ]])
-        for i in range(0, len(res), 4000):
-            chunk = res[i:i+4000]
-            await update.message.reply_text(chunk, reply_markup=kb if i+4000 >= len(res) else None)
-    except Exception as e:
-        logger.error(f"XATO: {type(e).__name__}: {e}")
-        await t.edit_text(f"❌ Xatolik: {type(e).__name__}: {str(e)[:200]}")
+def handle_update(update):
+    if "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"].get("text", "")
+        user_name = update["message"]["from"].get("first_name", "Foydalanuvchi")
 
-async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_mode.pop(update.effective_user.id, None)
-    await update.message.reply_text("🏠 Menyu 👇", reply_markup=menu())
+        if text == "/start" or text == "/menu":
+            user_mode.pop(chat_id, None)
+            send_menu(chat_id, f"👋 Salom *{user_name}*!\n\n🎓 *Akadem Yordamchi* — talabalar uchun AI!\n\nVazifa tanlang 👇")
+        else:
+            mode = user_mode.get(chat_id, "umumiy")
+            msg = tg("sendMessage", chat_id=chat_id, text=f"⏳ {NAMES[mode]} bajarilmoqda...")
+            msg_id = msg["result"]["message_id"]
+            try:
+                res = ask(PROMPTS[mode], text)
+                tg("deleteMessage", chat_id=chat_id, message_id=msg_id)
+                for i in range(0, len(res), 4000):
+                    chunk = res[i:i+4000]
+                    is_last = i + 4000 >= len(res)
+                    if is_last:
+                        tg("sendMessage",
+                            chat_id=chat_id,
+                            text=chunk,
+                            reply_markup={
+                                "inline_keyboard": [[
+                                    {"text": "🔄 Yana", "callback_data": mode},
+                                    {"text": "🏠 Menyu", "callback_data": "menu"}
+                                ]]
+                            }
+                        )
+                    else:
+                        tg("sendMessage", chat_id=chat_id, text=chunk)
+            except Exception as e:
+                logger.error(f"XATO: {e}")
+                tg("editMessageText", chat_id=chat_id, message_id=msg_id, text=f"❌ Xatolik: {str(e)[:200]}")
 
-async def main():
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", menu_cmd))
-    app.add_handler(CallbackQueryHandler(btn))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
-    await app.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True
-    )
+    elif "callback_query" in update:
+        query = update["callback_query"]
+        chat_id = query["message"]["chat"]["id"]
+        data = query["data"]
+        tg("answerCallbackQuery", callback_query_id=query["id"])
+
+        if data == "menu":
+            user_mode.pop(chat_id, None)
+            tg("editMessageText",
+                chat_id=chat_id,
+                message_id=query["message"]["message_id"],
+                text="🏠 Menyu 👇",
+                reply_markup={
+                    "inline_keyboard": [
+                        [{"text": "📊 Slayd", "callback_data": "slayd"}, {"text": "📝 Kurs ishi", "callback_data": "kurs"}],
+                        [{"text": "📄 Maqola", "callback_data": "maqola"}, {"text": "📚 Referat", "callback_data": "referat"}],
+                        [{"text": "✍️ Esse", "callback_data": "esse"}, {"text": "🧪 Test", "callback_data": "test"}],
+                        [{"text": "🌐 Tarjima", "callback_data": "tarjima"}, {"text": "💬 Suhbat", "callback_data": "umumiy"}],
+                    ]
+                }
+            )
+        else:
+            user_mode[chat_id] = data
+            tg("editMessageText",
+                chat_id=chat_id,
+                message_id=query["message"]["message_id"],
+                text=f"*{NAMES[data]}* rejimi!\n\nMavzuni yozing:",
+                parse_mode="Markdown",
+                reply_markup={
+                    "inline_keyboard": [[{"text": "🏠 Menyu", "callback_data": "menu"}]]
+                }
+            )
+
+def main():
+    offset = 0
+    logger.info("Bot ishga tushdi!")
+    while True:
+        try:
+            result = tg("getUpdates", offset=offset, timeout=30)
+            for update in result.get("result", []):
+                offset = update["update_id"] + 1
+                handle_update(update)
+        except Exception as e:
+            logger.error(f"Xato: {e}")
+            time.sleep(3)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
