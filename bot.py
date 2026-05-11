@@ -9,8 +9,8 @@ import ssl
 # CONFIG
 # =========================
 
-TOKEN = "PASTE_NEW_BOT_TOKEN"
-OPENROUTER_API_KEY = "PASTE_NEW_OPENROUTER_KEY"
+TOKEN = "8625557628:AAHkSiT2Acit6zQ42tgzKEBkBOZ5xGI7h6k"
+OPENROUTER_API_KEY = "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"
 
 MODEL = "openai/gpt-4o-mini"
 
