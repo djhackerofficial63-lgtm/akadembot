@@ -2,68 +2,231 @@ import urllib.request
 import urllib.parse
 import json
 import time
+import logging
+import ssl
 
-TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
-OPENROUTER_KEY = "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"
-BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+# =========================
+# CONFIG
+# =========================
 
-def tg_request(method, data=None):
-    url = f"{BASE_URL}/{method}"
-    if data:
-        data = json.dumps(data).encode()
-        req = urllib.request.Request(url, data=data,
-              headers={"Content-Type": "application/json"})
-    else:
-        req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())
+TOKEN = "PASTE_NEW_BOT_TOKEN"
+OPENROUTER_API_KEY = "PASTE_NEW_OPENROUTER_KEY"
+
+MODEL = "openai/gpt-4o-mini"
+
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}/"
+
+# =========================
+# LOGGING
+# =========================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+
+# =========================
+# SSL FIX
+# =========================
+
+ssl._create_default_https_context = ssl._create_unverified_context
+
+# =========================
+# TELEGRAM FUNCTIONS
+# =========================
+
+def delete_webhook():
+    try:
+        url = BASE_URL + "deleteWebhook"
+
+        with urllib.request.urlopen(url) as response:
+            result = json.loads(response.read())
+
+        logger.info(f"Webhook deleted: {result}")
+
+    except Exception as e:
+        logger.error(f"Webhook delete error: {e}")
+
+
+def get_updates(offset):
+    url = BASE_URL + f"getUpdates?timeout=30&offset={offset}"
+
+    with urllib.request.urlopen(url, timeout=35) as response:
+        data = response.read()
+
+    return json.loads(data)
+
 
 def send_message(chat_id, text):
-    tg_request("sendMessage", {"chat_id": chat_id, "text": text})
+    try:
+        message = str(text)[:4000]
 
-def ask_ai(user_message):
-    data = {
-        "model": "openai/gpt-4o-mini",
-        "messages": [
-            {"role": "system", "content": "Siz foydali akademik yordamchisiz. O'zbek tilida javob bering."},
-            {"role": "user", "content": user_message}
-        ]
-    }
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=json.dumps(data).encode(),
-        headers={
+        data = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "text": message
+        }).encode()
+
+        req = urllib.request.Request(
+            BASE_URL + "sendMessage",
+            data=data
+        )
+
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return response.read()
+
+    except Exception as e:
+        logger.error(f"Send message error: {e}")
+
+
+def send_typing(chat_id):
+    try:
+        data = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "action": "typing"
+        }).encode()
+
+        req = urllib.request.Request(
+            BASE_URL + "sendChatAction",
+            data=data
+        )
+
+        urllib.request.urlopen(req, timeout=10)
+
+    except:
+        pass
+
+# =========================
+# OPENROUTER AI
+# =========================
+
+def ask_ai(prompt):
+    try:
+        url = "https://openrouter.ai/api/v1/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENROUTER_KEY}"
+            "HTTP-Referer": "https://openrouter.ai",
+            "X-Title": "Akadem Bot"
         }
-    )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        result = json.loads(r.read())
+
+        payload = {
+            "model": MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a helpful Uzbek AI assistant for students. "
+                        "Answer clearly and shortly."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers=headers,
+            method="POST"
+        )
+
+        with urllib.request.urlopen(req, timeout=60) as response:
+            result = json.loads(response.read())
+
         return result["choices"][0]["message"]["content"]
 
+    except Exception as e:
+        logger.error(f"AI error: {e}")
+        return "AI bilan bog‘lanishda xatolik bo‘ldi."
+
+# =========================
+# MESSAGE HANDLER
+# =========================
+
+def handle_message(message):
+    try:
+        chat_id = message["chat"]["id"]
+
+        text = message.get("text", "")
+
+        logger.info(f"Message: {text}")
+
+        # START COMMAND
+        if text == "/start":
+            send_message(
+                chat_id,
+                "Salom! Men Akadem AI botman.\n\nSavolingizni yuboring."
+            )
+            return
+
+        # HELP COMMAND
+        if text == "/help":
+            send_message(
+                chat_id,
+                "Menga istalgan savol yuboring.\n"
+                "Men AI yordamida javob beraman."
+            )
+            return
+
+        # EMPTY MESSAGE
+        if not text:
+            send_message(chat_id, "Faqat text yuboring.")
+            return
+
+        send_typing(chat_id)
+
+        answer = ask_ai(text)
+
+        send_message(chat_id, answer)
+
+    except Exception as e:
+        logger.error(f"Handle message error: {e}")
+
+# =========================
+# MAIN LOOP
+# =========================
+
 def main():
-    print("✅ Bot ishga tushdi!")
+    logger.info("Bot starting...")
+
+    delete_webhook()
+
     offset = 0
+
     while True:
         try:
-            result = tg_request("getUpdates", {"offset": offset, "timeout": 25})
-            for update in result.get("result", []):
-                offset = update["update_id"] + 1
-                msg = update.get("message", {})
-                chat_id = msg.get("chat", {}).get("id")
-                text = msg.get("text", "")
-                if not chat_id or not text:
-                    continue
-                print(f"📩 {chat_id}: {text}")
-                if text == "/start":
-                    send_message(chat_id, "Salom! Men akademik yordamchiman. Savolingizni yozing!")
-                else:
-                    send_message(chat_id, "⏳ Javob tayyorlanmoqda...")
-                    reply = ask_ai(text)
-                    send_message(chat_id, reply)
+            updates = get_updates(offset)
+
+            if updates.get("ok"):
+
+                for update in updates["result"]:
+
+                    offset = update["update_id"] + 1
+
+                    if "message" in update:
+                        handle_message(update["message"])
+
+            time.sleep(1)
+
+        except KeyboardInterrupt:
+            logger.info("Bot stopped")
+            break
+
         except Exception as e:
-            print(f"❌ Xato: {e}")
+            logger.error(f"Main loop error: {e}")
             time.sleep(5)
+
+# =========================
+# START
+# =========================
 
 if __name__ == "__main__":
     main()
