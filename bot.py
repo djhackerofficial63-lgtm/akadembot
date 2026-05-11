@@ -5,15 +5,13 @@ import logging
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from aiohttp import web
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
-TOGETHER_API_KEY = "tgp_v1_8QBA51Bhw5VIR2X8FrREJpReZCd6elFLmXs9whDnI68"
-PORT = int(os.environ.get("PORT", 8080))
-WEBHOOK_URL = "https://akadembot-1.onrender.com"
+OPENROUTER_API_KEY = "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"
+
 user_mode = {}
 
 PROMPTS = {
@@ -44,7 +42,7 @@ def menu():
 
 def ask(system, text):
     data = json.dumps({
-        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        "model": "meta-llama/llama-3.3-70b-instruct:free",
         "max_tokens": 4000,
         "messages": [
             {"role": "system", "content": system},
@@ -52,11 +50,13 @@ def ask(system, text):
         ]
     }).encode()
     req = urllib.request.Request(
-        "https://api.together.xyz/v1/chat/completions",
+        "https://openrouter.ai/api/v1/chat/completions",
         data=data,
         headers={
-            "Authorization": f"Bearer {TOGETHER_API_KEY}",
-            "content-type": "application/json"
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "content-type": "application/json",
+            "HTTP-Referer": "https://t.me/akadem_yordamchi_bot",
+            "X-Title": "Akadem Yordamchi Bot"
         },
     )
     with urllib.request.urlopen(req) as r:
@@ -110,34 +110,10 @@ async def main():
     app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CallbackQueryHandler(btn))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
-
-    await app.bot.set_webhook(
-        url=f"{WEBHOOK_URL}/{TOKEN}",
+    await app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True
     )
-    await app.initialize()
-    await app.start()
-
-    async def handle(request):
-        data = await request.json()
-        update = Update.de_json(data, app.bot)
-        await app.process_update(update)
-        return web.Response(text="OK")
-
-    async def health(request):
-        return web.Response(text="Bot is running!")
-
-    server = web.Application()
-    server.router.add_post(f"/{TOKEN}", handle)
-    server.router.add_get("/", health)
-
-    runner = web.AppRunner(server)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", PORT)
-    await site.start()
-
-    logger.info("Bot ishga tushdi!")
-    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(main())
