@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 TOKEN = "8625557628:AAGXuX8xanFU2zoCS5LcXPezhQXsGUP_XQc"
 TOGETHER_API_KEY = "tgp_v1_8QBA51Bhw5VIR2X8FrREJpReZCd6elFLmXs9whDnI68"
 PORT = int(os.environ.get("PORT", 8080))
-WEBHOOK_URL = "https://akadembot.onrender.com"
-
+WEBHOOK_URL = "https://akadembot-1.onrender.com"
 user_mode = {}
 
 PROMPTS = {
